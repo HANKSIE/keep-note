@@ -9,6 +9,7 @@ Vue.use(VueRouter);
 const router = new VueRouter({
     routes: [
         { path: "/", component: List },
+        { path: "/note", component: View},
         { path: "/note/:id", component: View, props: true },
     ]
 });

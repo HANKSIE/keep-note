@@ -6,9 +6,6 @@
 
 class HDB {
 
-    /**
-     * @constant
-     */
     static get READONLY() {
         return "readonly";
     }
@@ -27,23 +24,34 @@ class HDB {
 
     /**
      * 
-     * @param {String} database database name
-     * @param {String} table table name
-     * @param {object} config configuration of table
+     * @param {String} database - database name
+     * @param {String} table - table name
+     * @param { {keyPath: String, autoIncrement:String, indexes:Array<{name: String, keyPath:String, options:Object}>} } config - configuration of table
      * 
-     * @returns {HDB | Error} 
+     * @returns {Promise<HDB> | Promise<Error>} 
      */
     constructor(database, table, config = {keyPath: "", autoIncrement: "", indexes: []}){
+        
         this.database = database;
         this.table = table;
         this.config = config;
         this.DB;
+
+        /**
+         * @property {Array.<String>} fields - select fields
+         * @property {Object} condition - key-value pair object
+         * @property {Array<{column: String, orderBy: String}>} orderBy - object in array.
+         * @property {Number} limit
+         * @property {Number} offset
+         * @property {Object} updatePair - key-value pair object
+         */
         this.Query = {
             fields: undefined,
             condition: undefined,
             orderBy: undefined,
             limit: undefined,
             offset: undefined,
+            updatePair: undefined,
         };
 
         return new Promise((resolve, reject) => {
@@ -79,27 +87,6 @@ class HDB {
             };
         });
     }  
-
-    /**
-     * @private
-     * 
-     * @param {String} mode
-     * @returns {IDBObjectStore} 
-     */
-    _getObjectStore(mode) {
-
-        const transaction = this.DB.transaction(this.table, mode);
-        
-        transaction.onabort = () => {
-            throw new Error("transaction aborted..");
-        };
-        
-        transaction.onerror = () => {
-            throw new Error("transaction error..");
-        };
-
-        return transaction.objectStore(this.table);
-    }
 
     /**
      * clear table
@@ -197,14 +184,17 @@ class HDB {
     find(pk) {
         return new Promise((resolve, reject) => {
             const store = this._getObjectStore(HDB.READONLY);
-            if(NumberHelper.isNumber(pk)){
-                pk = NumberHelper.isInteger(pk)?Number.parseInt(pk):Number.parseFloat(pk);
+            
+            pk = NumberHelper.parse(pk);
+            if(isNaN(pk)){
+                resolve(null);
             }
+
             const action = store.get(pk);
         
             action.onsuccess = () => {
                 this._queryInit();
-                resolve(action.result);
+                resolve(action.result || null);
             };
             
             action.onerror = () => {
@@ -213,6 +203,9 @@ class HDB {
         });
     }
     
+    /**
+     * @returns {Array<Object>}
+     */
     async get(){
         const result = await this._generateResult();
         var collection = result.map(target => {
@@ -257,17 +250,6 @@ class HDB {
                 const offset = this.Query.offset ||  0;
                 collection = collection.slice(offset, offset + this.Query.limit);
             }
-
-            // select
-            if(this.Query.fields){
-                collection = collection.map(item => {
-                    const newItem = {};
-                    this.Query.fields.forEach(field => {
-                        newItem[field] = item[field];
-                    });
-                    return newItem;
-                });
-            }
     
         }
 
@@ -275,9 +257,51 @@ class HDB {
         return collection;
     }
 
-    async delete(){
+    /**
+     * @returns {Object|null}
+     */
+    async first(){
+        this.Query.limit = 1;
+        const result = await this.get();
+        return result.length === 0?null:result[0];
+    }
+
+    /**
+     * @throws {String}
+     * @param {Object} pair key-value pair you want changed
+     * @returns {Boolean}
+     */
+    async update(pair){
+        
+        if(this.Query.fields){
+            throw new Error("cannot use 'select' when updating");
+        }
+
+        this.Query.updatePair = pair;
         const result = await this._generateResult();
 
+        let isSuccess = true;
+        for(let i=0; i<result.length; i++){
+            if(!await this._updatePromise(result[i])){
+                isSuccess = false;
+            }
+        }
+
+        this._queryInit();
+        return isSuccess;
+    }
+
+    /**
+     * @throws {String}
+     * @returns {Boolean}
+     */
+    async delete(){
+
+        if(this.Query.fields){
+            throw new Error("cannot use 'select' when deleting");
+        }
+
+        const result = await this._generateResult();
         let isSuccess = true;
         for(let i=0; i<result.length; i++){
             const pk = result[i].pk;
@@ -299,7 +323,29 @@ class HDB {
     }
 
     /**
+     * @private
      * 
+     * @throws {String}
+     * 
+     * @param {String} mode
+     * @returns {IDBObjectStore} 
+     */
+    _getObjectStore(mode) {
+
+        const transaction = this.DB.transaction(this.table, mode);
+        
+        transaction.onabort = () => {
+            throw new Error("transaction aborted..");
+        };
+        
+        transaction.onerror = () => {
+            throw new Error("transaction error..");
+        };
+
+        return transaction.objectStore(this.table);
+    }
+
+    /**
      * @returns {Array<Object>}
      */
     async _generateResult(){
@@ -307,20 +353,33 @@ class HDB {
         const collection = [];
 
         await this._iterate(cursor => {
-            const item = cursor.value;
-            item[cursor.source.keyPath] = cursor.primaryKey;
+            let item = {};
+            
+            // select
+            if(this.Query.fields){
+                this.Query.fields.forEach(field => {
+                    item[field] = cursor.value[field];
+                });
+            }else{
+                item = cursor.value;
+            }
+
             if(condition){
-                if (this._valid(cursor.value, condition)) {
-                    collection.push({ pk: cursor.primaryKey,  item: cursor.value});
+                if (this._valid(cursor.value)) {
+                    collection.push({ pk: cursor.primaryKey,  item});
                 }
             }else{
-                collection.push({ pk: cursor.primaryKey,  item: cursor.value});
+                collection.push({ pk: cursor.primaryKey,  item});
             }
         });
 
         return collection;
     }
     
+    /**
+     * @private
+     * @param {Object} condition 
+     */
     _formatCondition(condition){
         const convert = {};
         //轉換key格式為"[field][space][op]"
@@ -329,6 +388,11 @@ class HDB {
             
             if(!op){
                 op = "=";
+            }
+
+            // where in
+            if(Array.isArray(val)){
+                op = "in";
             }
 
             const newCond = field + " " + op;
@@ -340,13 +404,13 @@ class HDB {
     }
 
     /**
-     * 
+     * condition validate
+     * @private
      * @param {Object} item 
-     * @param {Object} condition 
      * 
      * @returns {Boolean}
      */
-    _valid(item, condition){
+    _valid(item){
 
         const verify = {
             ">": (value, target) => value > target,
@@ -355,9 +419,10 @@ class HDB {
             "<=": (value, target) => value <= target,
             "=": (value, target) => value === target,
             "like": (value, target) => String(value).includes(target),
+            "in": (value, target) => target.includes(value),
         }
 
-        for (const [cond, val] of Object.entries(condition)) {
+        for (const [cond, val] of Object.entries(this.Query.condition)) {
 
             const [field, op] = cond.split(/\s+/);
 
@@ -372,7 +437,7 @@ class HDB {
 
     /**
      * iterate objectstore
-     * 
+     * @private
      * @callback handle 
      */
     _iterate(handle) {
@@ -392,14 +457,47 @@ class HDB {
         }); 
     }
 
+    /**
+     * initialize Query
+     * @private
+     */
     _queryInit(){
         this.Query = {};
     }
 
+    /**
+     * @private
+     * @param {Object} el 
+     */
+    _updatePromise(el){
+        return new Promise((resolve, reject) => {
+            
+            const store = this._getObjectStore(HDB.READWRITE);
+        
+            const updatePair = this.Query.updatePair;
+            const newItem = {...el.item, ...updatePair};
+
+            const action = store.put(newItem);
+          
+            action.onsuccess = () => {
+                resolve(true);
+            };
+          
+            action.onerror = () => {
+                reject(false);
+            };
+        });
+    }
+
+    /**
+     * @private
+     * @param {String|Number} pk 
+     */
     _deletePromise(pk){
         return new Promise((resolve, reject) => {
             const store = this._getObjectStore(HDB.READWRITE);
         
+            pk = NumberHelper.parse(pk);
             const action = store.delete(pk);
           
             action.onsuccess = () => {
@@ -416,7 +514,7 @@ class HDB {
 class NumberHelper {
     /**
      * 是否為數字
-     * @param {number} val
+     * @param {string|number} val
      * @return {boolean}
      */
     static isNumber(val){
@@ -425,7 +523,7 @@ class NumberHelper {
 
     /**
      * 是否為整數
-     * @param {number} val
+     * @param {string|number} val
      * @return {boolean}
      */
     static isInteger(val){
@@ -438,7 +536,7 @@ class NumberHelper {
 
     /**
      * 是否為大於等於0之整數
-     * @param {number} val
+     * @param {string|number} val
      * @return {boolean}
      */
     static isNatural(val){
@@ -448,12 +546,26 @@ class NumberHelper {
 
         return Number.parseInt(val) >= 0;
     }
+
+    /**
+     * 若是整數字串，回傳整數；若是浮點數字串，回傳浮點數
+     * 
+     * @param {string} val 
+     * @returns {number|NaN}
+     */
+    static parse(val){
+        if(NumberHelper.isNumber(val)){
+            return NumberHelper.isInteger(val)?Number.parseInt(val):Number.parseFloat(val);
+        }
+
+        return Number.NaN;
+    }
 }
 
 class DateHelper {
     /**
      * 是否為合法日期
-     * @param {number} str
+     * @param {string} str
      * @return {boolean}
      */
     static isDate(str){
