@@ -25,6 +25,7 @@ pnpm-debug.log*
 # Cordova
 /src-cordova/platforms
 /src-cordova/plugins
+/src-cordova/www
 /public/cordova.js
 
 # Cordova

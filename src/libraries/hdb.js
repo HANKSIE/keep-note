@@ -276,6 +276,10 @@ class HDB {
       throw new Error("cannot use 'select' when updating");
     }
 
+    if (!this.Query.condition) {
+      throw new Error("need condition when updating");
+    }
+
     this.Query.updatePair = pair;
     const result = await this._generateResult();
 
@@ -292,11 +296,20 @@ class HDB {
 
   /**
    * @throws {String}
+   * @param {Object} condition
    * @returns {Boolean}
    */
-  async delete() {
+  async delete(condition) {
+    if (condition) {
+      this.where(condition);
+    }
+
     if (this.Query.fields) {
       throw new Error("cannot use 'select' when deleting");
+    }
+
+    if (!this.Query.condition) {
+      throw new Error("need condition when deleting");
     }
 
     const result = await this._generateResult();

@@ -24,15 +24,15 @@
       <v-list nav>
         <v-list-item to="/">
           <v-list-item-icon>
-            <v-icon>mdi-view-list</v-icon>
+            <v-icon>mdi-view-list-outline</v-icon>
           </v-list-item-icon>
           <v-list-item-title>列表</v-list-item-title>
         </v-list-item>
-        <v-list-item to="/trashcan">
+        <v-list-item to="/archive">
           <v-list-item-icon>
-            <v-icon>mdi-delete</v-icon>
+            <v-icon>mdi-archive-arrow-down-outline</v-icon>
           </v-list-item-icon>
-          <v-list-item-title>垃圾桶</v-list-item-title>
+          <v-list-item-title>封存</v-list-item-title>
         </v-list-item>
       </v-list>
     </v-navigation-drawer>
@@ -40,7 +40,7 @@
     <v-row class="flex-column">
       <v-col>
         <template v-if="hadNotes">
-          <template v-for="note in notes">
+          <template v-for="note in note.list">
             <v-card :key="note.id" class="mt-5" :to="`/note/${note.id}`">
               <v-card-title>
                 <v-container>
@@ -82,26 +82,32 @@
 </template>
 
 <script>
+import { mapState } from "vuex";
+
 export default {
   data() {
     return {
-      notes: [],
-      hadNotes: true,
       openNav: false,
       searchText: "",
     };
   },
 
   methods: {
-    search() {
-      console.log(this.searchText);
+    async search() {
+      await this.$store.dispatch("note/load", this.searchText);
+      window.scrollTo(0, 0);
+    },
+  },
+
+  computed: {
+    ...mapState(["note"]),
+    hadNotes() {
+      return this.note.list.length !== 0;
     },
   },
 
   async created() {
-    const Note = await this.$fetchNote();
-    this.notes = await Note.get();
-    this.hadNotes = this.notes.length !== 0;
+    await this.$store.dispatch("note/load");
   },
 };
 </script>

@@ -20,21 +20,23 @@
           </v-card-title>
           <v-card-text>
             <v-list dense>
-              <template v-for="item in note.items">
-                <v-list-item :key="item.id">
-                  <v-list-item-action>
-                    <v-checkbox v-model="item.checked" />
-                  </v-list-item-action>
-                  <v-list-item-content>
-                    <v-textarea auto-grow rows="1" v-model="item.text" />
-                  </v-list-item-content>
-                  <v-list-item-action>
-                    <v-btn depressed icon small @click="removeItem(item.id)"
-                      ><v-icon>mdi-close</v-icon></v-btn
-                    >
-                  </v-list-item-action>
-                </v-list-item>
-              </template>
+              <v-scroll-y-reverse-transition group>
+                <template v-for="item in note.items">
+                  <v-list-item :key="item.id">
+                    <v-list-item-action>
+                      <v-checkbox v-model="item.checked" />
+                    </v-list-item-action>
+                    <v-list-item-content>
+                      <v-textarea auto-grow rows="1" v-model="item.text" />
+                    </v-list-item-content>
+                    <v-list-item-action>
+                      <v-btn depressed icon small @click="removeItem(item.id)"
+                        ><v-icon>mdi-close</v-icon></v-btn
+                      >
+                    </v-list-item-action>
+                  </v-list-item>
+                </template>
+              </v-scroll-y-reverse-transition>
               <v-list-item>
                 <v-list-item-action>
                   <v-btn @click="insertEmptyItem"
@@ -54,14 +56,14 @@
         <v-icon>mdi-pin</v-icon>
       </v-btn>
 
+      <v-btn>
+        <span>Archive</span>
+        <v-icon>mdi-archive-arrow-down</v-icon>
+      </v-btn>
+
       <v-btn @click="remove">
         <span>Delete</span>
         <v-icon>mdi-trash-can</v-icon>
-      </v-btn>
-
-      <v-btn @click="save">
-        <span>Save</span>
-        <v-icon>mdi-content-save</v-icon>
       </v-btn>
     </v-bottom-navigation>
   </v-container>
@@ -75,42 +77,45 @@ export default {
       default: null,
     },
   },
+
   data() {
     return {
       note: {},
     };
   },
+
   methods: {
     insertEmptyNote() {
       this.note = {
         title: "",
         items: [],
       };
+
+      this.insertEmptyItem();
     },
+
     insertEmptyItem() {
-      let id = 0;
+      let id = performance.now();
       if (this.note.items.length > 0) {
         id = this.note.items[this.note.items.length - 1].id + 1;
       }
       this.note.items.push({ id, text: "", checked: false });
     },
 
-    async save() {
-      const Note = await this.$fetchNote();
-      await Note.update(this.note);
-      this.$router.back();
-    },
-
     removeItem(id) {
       this.note.items = this.note.items.filter((item) => item.id != id);
     },
 
+    async save() {
+      await this.$store.dispatch("note/save", this.note);
+    },
+
     async remove() {
-      const Note = await this.$fetchNote();
-      await Note.where({ id: this.note.id }).delete();
+      await this.$store.dispatch("note/remove", this.note.id);
       this.$router.back();
     },
   },
+
   async created() {
     const Note = await this.$fetchNote();
     const note = await Note.find(this.id);
@@ -119,7 +124,13 @@ export default {
     } else {
       this.insertEmptyNote();
       this.note = await Note.create(this.note);
-      this.insertEmptyItem();
+    }
+  },
+
+  async updated() {
+    // 資料庫有該筆筆記
+    if (this.note.id) {
+      await this.save();
     }
   },
 };
