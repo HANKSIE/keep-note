@@ -51,16 +51,6 @@
     </v-row>
 
     <v-bottom-navigation grow fixed>
-      <v-btn>
-        <span>Pin</span>
-        <v-icon>mdi-pin</v-icon>
-      </v-btn>
-
-      <v-btn>
-        <span>Archive</span>
-        <v-icon>mdi-archive-arrow-down</v-icon>
-      </v-btn>
-
       <v-btn @click="remove">
         <span>Delete</span>
         <v-icon>mdi-trash-can</v-icon>

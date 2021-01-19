@@ -3,7 +3,6 @@
     <v-app-bar app>
       <v-text-field
         dense
-        prepend-inner-icon="mdi-menu"
         append-icon="mdi-magnify"
         background-color="secondary"
         solo
@@ -11,31 +10,9 @@
         :hide-details="true"
         label="搜尋您的記事"
         @click:append="search"
-        @click:prepend-inner="openNav = !openNav"
         v-model.trim="searchText"
       />
     </v-app-bar>
-
-    <v-navigation-drawer app v-model="openNav" temporary>
-      <template v-slot:prepend>
-        <v-subheader inset>導覽列</v-subheader>
-        <v-divider></v-divider>
-      </template>
-      <v-list nav>
-        <v-list-item to="/">
-          <v-list-item-icon>
-            <v-icon>mdi-view-list-outline</v-icon>
-          </v-list-item-icon>
-          <v-list-item-title>列表</v-list-item-title>
-        </v-list-item>
-        <v-list-item to="/archive">
-          <v-list-item-icon>
-            <v-icon>mdi-archive-arrow-down-outline</v-icon>
-          </v-list-item-icon>
-          <v-list-item-title>封存</v-list-item-title>
-        </v-list-item>
-      </v-list>
-    </v-navigation-drawer>
 
     <v-row class="flex-column">
       <v-col>
